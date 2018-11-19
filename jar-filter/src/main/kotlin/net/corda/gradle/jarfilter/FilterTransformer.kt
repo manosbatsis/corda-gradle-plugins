@@ -1,5 +1,7 @@
 package net.corda.gradle.jarfilter
 
+import kotlinx.metadata.KmClassVisitor
+import kotlinx.metadata.KmPackageVisitor
 import org.gradle.api.InvalidUserDataException
 import org.gradle.api.logging.Logger
 import org.objectweb.asm.*
@@ -18,7 +20,7 @@ import org.objectweb.asm.Opcodes.*
 class FilterTransformer private constructor (
     visitor: ClassVisitor,
     logger: Logger,
-    kotlinMetadata: MutableMap<String, List<String>>,
+    kotlinMetadata: MutableMap<String, Array<String>>,
     private val removeAnnotations: Set<String>,
     private val deleteAnnotations: Set<String>,
     private val stubAnnotations: Set<String>,
@@ -175,7 +177,7 @@ class FilterTransformer private constructor (
     /**
      * Removes the deleted methods and fields from the Kotlin Class metadata.
      */
-    override fun processClassMetadata(data1: List<String>, data2: List<String>): List<String> {
+    override fun getClassVisitor(cv: KmClassVisitor?): KmClassVisitor {
         val partitioned = deletedMethods.groupBy(MethodElement::isConstructor)
         val prefix = "$className$"
         return ClassMetadataTransformer(
@@ -186,23 +188,19 @@ class FilterTransformer private constructor (
                 deletedNestedClasses = unwantedElements.classes.filter { it.startsWith(prefix) }.map { it.drop(prefix.length) },
                 deletedClasses = unwantedElements.classes,
                 handleExtraMethod = ::delete,
-                data1 = data1,
-                data2 = data2)
-            .transform()
+                cv = cv)
     }
 
     /**
      * Removes the deleted methods and fields from the Kotlin Package metadata.
      */
-    override fun processPackageMetadata(data1: List<String>, data2: List<String>): List<String> {
+    override fun getPackageVisitor(pv: KmPackageVisitor?): KmPackageVisitor {
         return PackageMetadataTransformer(
                 logger = logger,
                 deletedFields = unwantedFields,
                 deletedFunctions = deletedMethods,
                 handleExtraMethod = ::delete,
-                data1 = data1,
-                data2 = data2)
-            .transform()
+                pv = pv)
     }
 
     /**

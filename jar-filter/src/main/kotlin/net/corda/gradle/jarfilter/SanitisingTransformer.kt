@@ -1,20 +1,17 @@
 package net.corda.gradle.jarfilter
 
-import kotlinx.metadata.internal.metadata.ProtoBuf
-import kotlinx.metadata.internal.metadata.deserialization.Flags.*
-import kotlinx.metadata.internal.metadata.deserialization.TypeTable
-import kotlinx.metadata.internal.metadata.jvm.JvmProtoBuf.*
-import kotlinx.metadata.internal.metadata.jvm.deserialization.BitEncoding
-import kotlinx.metadata.internal.metadata.jvm.deserialization.JvmNameResolver
-import kotlinx.metadata.internal.metadata.jvm.deserialization.JvmProtoBufUtil.EXTENSION_REGISTRY
-import kotlinx.metadata.internal.metadata.jvm.deserialization.JvmProtoBufUtil.getJvmConstructorSignature
+import kotlinx.metadata.*
+import kotlinx.metadata.Flag.Constructor.IS_PRIMARY
+import kotlinx.metadata.jvm.JvmConstructorExtensionVisitor
+import kotlinx.metadata.jvm.JvmMethodSignature
+import kotlinx.metadata.jvm.KotlinClassHeader
+import kotlinx.metadata.jvm.KotlinClassMetadata
 import org.gradle.api.logging.LogLevel
 import org.gradle.api.logging.Logger
 import org.objectweb.asm.AnnotationVisitor
 import org.objectweb.asm.ClassVisitor
 import org.objectweb.asm.MethodVisitor
 import org.objectweb.asm.Opcodes.*
-import java.io.ByteArrayInputStream
 
 /**
  * This is (hopefully?!) a temporary solution for classes with [JvmOverloads] constructors.
@@ -37,24 +34,33 @@ class SanitisingTransformer(visitor: ClassVisitor, logger: Logger, private val u
     private var className: String = "(unknown)"
     private var primaryConstructor: MethodElement? = null
 
-    override fun processPackageMetadata(data1: List<String>, data2: List<String>): List<String> = emptyList()
+    override fun getPackageVisitor(pv: KmPackageVisitor?): KmPackageVisitor? = null
 
-    override fun processClassMetadata(data1: List<String>, data2: List<String>): List<String> {
-        val input = ByteArrayInputStream(BitEncoding.decodeBytes(data1.toTypedArray()))
-        val stringTableTypes = StringTableTypes.parseDelimitedFrom(input, EXTENSION_REGISTRY)
-        val nameResolver = JvmNameResolver(stringTableTypes, data2.toTypedArray())
-        val message = ProtoBuf.Class.parseFrom(input, EXTENSION_REGISTRY)
-        val typeTable = TypeTable(message.typeTable)
+    override fun getClassVisitor(cv: KmClassVisitor?): KmClassVisitor = object : KmClassVisitor(cv) {
+        override fun visitConstructor(flags: Flags): KmConstructorVisitor? {
+            return if (IS_PRIMARY(flags)) {
+                object : KmConstructorVisitor() {
+                    override fun visitExtensions(type: KmExtensionType): KmConstructorExtensionVisitor? {
+                        if (type != JvmConstructorExtensionVisitor.TYPE) return null
 
-        for (constructor in message.constructorList) {
-            if (!IS_SECONDARY.get(constructor.flags)) {
-                val signature = getJvmConstructorSignature(constructor, nameResolver, typeTable) ?: break
-                primaryConstructor = signature.toMethodElement()
-                logger.log(level, "Class {} has primary constructor {}", className, signature.asString())
-                break
+                        return object : JvmConstructorExtensionVisitor() {
+                            override fun visit(desc: JvmMethodSignature?) {
+                                val signature = desc ?: return
+                                primaryConstructor = signature.toMethodElement()
+                                logger.log(level, "Class {} has primary constructor {}", className, signature.asString())
+                            }
+                        }
+                    }
+                }
+            } else {
+                null
             }
         }
-        return emptyList()
+    }
+
+    override fun processClassMetadata(header: KotlinClassHeader, metadata: KotlinClassMetadata.Class): KotlinClassHeader? {
+        metadata.accept(getClassVisitor(null))
+        return null
     }
 
     override fun visit(version: Int, access: Int, clsName: String, signature: String?, superName: String?, interfaces: Array<String>?) {

@@ -10,6 +10,7 @@ import kotlinx.metadata.internal.metadata.jvm.deserialization.ClassMapperLite
 import kotlinx.metadata.internal.metadata.jvm.deserialization.JvmMemberSignature
 import kotlinx.metadata.internal.metadata.jvm.deserialization.JvmProtoBufUtil
 import kotlinx.metadata.internal.protobuf.GeneratedMessageLite.*
+import kotlinx.metadata.jvm.JvmMethodSignature
 import org.objectweb.asm.Opcodes.ACC_SYNTHETIC
 import java.util.*
 
@@ -120,6 +121,8 @@ internal fun JvmProtoBuf.JvmMethodSignature.toMethodElement(nameResolver: NameRe
     = MethodElement(nameResolver.getString(name), nameResolver.getString(desc))
 
 internal fun JvmMemberSignature.Method.toMethodElement() = MethodElement(name, desc)
+
+internal fun JvmMethodSignature.toMethodElement() = MethodElement(name, desc)
 
 /**
  * This logic is based heavily on [JvmProtoBufUtil.getJvmFieldSignature].

@@ -1,5 +1,7 @@
 package net.corda.gradle.jarfilter
 
+import kotlinx.metadata.KmClassVisitor
+import kotlinx.metadata.KmPackageVisitor
 import org.gradle.api.logging.Logger
 import org.objectweb.asm.*
 import org.objectweb.asm.Opcodes.*
@@ -12,7 +14,7 @@ import org.objectweb.asm.Opcodes.*
 class MetaFixerVisitor private constructor(
     visitor: ClassVisitor,
     logger: Logger,
-    kotlinMetadata: MutableMap<String, List<String>>,
+    kotlinMetadata: MutableMap<String, Array<String>>,
     private val classNames: Set<String>,
     private val fields: MutableSet<FieldElement>,
     private val methods: MutableSet<String>,
@@ -52,7 +54,11 @@ class MetaFixerVisitor private constructor(
         return super.visitInnerClass(clsName, outerName, innerName, access)
     }
 
-    override fun processClassMetadata(data1: List<String>, data2: List<String>): List<String> {
+    override fun getClassVisitor(cv: KmClassVisitor?): KmClassVisitor? {
+        return cv
+    }
+
+    fun processClassMetadata(data1: List<String>, data2: List<String>): List<String> {
         return ClassMetaFixerTransformer(
                 logger = logger,
                 actualFields = fields,
@@ -64,7 +70,11 @@ class MetaFixerVisitor private constructor(
             .transform()
     }
 
-    override fun processPackageMetadata(data1: List<String>, data2: List<String>): List<String> {
+    override fun getPackageVisitor(pv: KmPackageVisitor?): KmPackageVisitor? {
+        return pv
+    }
+
+    fun processPackageMetadata(data1: List<String>, data2: List<String>): List<String> {
         return PackageMetaFixerTransformer(
                 logger = logger,
                 actualFields = fields,
